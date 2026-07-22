@@ -1,0 +1,63 @@
+# Codemagic CI/CD configuration for YANSPROJECT.ID ERP
+
+workflows:
+  yansproject-erp-build:
+    name: YANSPROJECT.ID ERP Build Pipeline
+    max_build_duration: 60
+    instance_type: mac_mini_m1
+    environment:
+      groups:
+        - signing_config  # Official signing credentials from CI/CD vault
+      android_signing:
+        - yansproject-upload
+      vars:
+        PACKAGE_NAME: "com.yansproject.app"
+      java: 17
+    triggering:
+      events:
+        - push
+        - pull_request
+      branch_patterns:
+        - pattern: 'main'
+        - pattern: 'master'
+    scripts:
+      - name: System Diagnostics and Environment Audit
+        script: |
+          echo "=== Global System Audit ==="
+          echo "OS Information:"
+          uname -a
+          echo "Java Version Check (AGP 9.1.1 Compatibility):"
+          java -version
+          echo "Checking Environment Variables:"
+          echo "KEYSTORE_PATH: ${KEYSTORE_PATH:-Not Set}"
+          echo "CM_KEY_ALIAS: ${CM_KEY_ALIAS:-Not Set}"
+          
+      - name: Gradle Wrapper Integrity Setup
+        script: |
+          echo "=== Gradle Wrapper Check ==="
+          if [ -f "gradlew" ]; then
+            echo "Existing Gradle Wrapper found. Preserving and using default wrapper."
+            chmod +x gradlew
+          else
+            echo "Gradle Wrapper is missing. Generating official wrapper automatically..."
+            gradle wrapper --gradle-version 8.10.2
+            chmod +x gradlew
+          fi
+
+      - name: Build Debug APK
+        script: |
+          echo "=== Compiling Debug Version ==="
+          ./gradlew assembleDebug
+
+      - name: Build Release App Bundle and APK
+        script: |
+          echo "=== Compiling Release Version ==="
+          # Constructing production artifact using Codemagic or custom CM key variables
+          export KEY_ALIAS="${CM_KEY_ALIAS}"
+          export STORE_PASSWORD="${CM_KEYSTORE_PASSWORD}"
+          export KEY_PASSWORD="${CM_KEYSTORE_PASSWORD}"
+          ./gradlew assembleRelease bundleRelease
+
+    artifacts:
+      - app/build/outputs/apk/**/*.apk
+      - app/build/outputs/bundle/**/*.aab
